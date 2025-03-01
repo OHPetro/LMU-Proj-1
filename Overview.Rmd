@@ -1,0 +1,212 @@
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Ctrl+Shift+Enter*. 
+
+
+Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Ctrl+Alt+I*.
+
+When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Ctrl+Shift+K* to preview the HTML file).
+
+The preview shows you a rendered HTML copy of the contents of the editor. Consequently, unlike *Knit*, *Preview* does not run any R code chunks. Instead, the output of the chunk when it was last run in the editor is displayed.
+-----------------------------------------------------------------------------------------------------------------------------
+
+---
+title: "Overview"
+output: html_notebook
+---
+
+---
+To helen:
+
+1) Is dataset is clean? for us its clean 
+2) Is it that simple
+3) Which methods we can use 
+
+
+Fragestellung:  
+1) Is there an association between type of conflict(event_type) and conflict groups(actor1)? 
+    **Q : Do we want to count Police in different year as one unit?*
+    **Q : More specific about event type\  build up our types? fi : do cluster analysis with location, fatalities*
+    **Q : Should we crop to top 10 for each  event type?*
+2) Is there  a change in the type of conflict observable over time?
+---
+
+
+Libraries
+```{r}
+
+# Загрузка необходимых библиотек
+library(dplyr)
+library(ggplot2)
+library(gridExtra)
+library(tidyverse)
+library(forcats)
+
+```
+
+
+DataSet  first touch
+```{r}
+# Loading the dataset
+file_path <- "1997-01-01-2025-01-01-Nigeria.csv"
+df <- read.csv(file_path, stringsAsFactors = FALSE)
+
+# Displaying the first 5 rows of the dataset
+cat("First 5 rows of the dataset:\n")
+print(head(df, 5))
+```
+
+
+First Overview 
+
+
+
+
+```{r}
+# Displaying basic information about the dataset
+cat("\nBasic information about the dataset:\n")
+print(str(df))
+
+# Displaying column names
+cat("\nColumn names:\n")
+print(colnames(df))
+
+# Displaying the count of missing values
+cat("\nCount of missing values in each column:\n")
+print(colSums(is.na(df)))
+
+# Displaying the count of unique values in text columns
+cat("\nCount of unique values in text columns:\n")
+text_columns <- sapply(df, is.character)
+unique_counts <- sapply(df[text_columns], function(x) length(unique(x)))
+print(unique_counts)
+```
+
+
+
+
+
+Event_type - our y
+```{r}
+# Histogram for the event_type column
+cat("\nHistogram for event_type:\n")
+ggplot(df, aes(x = event_type)) +
+  geom_bar(fill = "blue", color = "black") +  # Create bar chart
+  theme_minimal() +                           # Use minimal theme
+  labs(title = "Distribution of event_type", x = "Event Type", y = "Frequency") +  # Add title and axis labels
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +  # Rotate x-axis labels for better readability
+  geom_text(stat = 'count', aes(label = ..count..), vjust = -0.5)  # Add count labels above the bars
+
+```
+
+
+
+
+
+
+----------------------------------------------------------------------------
+
+
+
+---
+1) Is there an association between type of conflict(event_type) and conflict groups(actor1)? 
+---
+
+
+
+Top Actors Histogram 
+
+
+```{r}
+# Get the top 15 actors across all event types
+top_actors <- df %>%
+  count(actor1, sort = TRUE) %>%
+  top_n(10, n) %>%
+  arrange(desc(n))
+
+# Create the histogram for the top 15 actors
+cat("\nHistogram for the top 15 actors across all event types:\n")
+ggplot(top_actors, aes(x = reorder(actor1, n), y = n, fill = actor1)) +
+  geom_bar(stat = "identity", color = "black") +  # Create bar chart
+  theme_minimal() +                               # Use minimal theme
+  labs(title = "Top 15 Actors by Frequency", x = "Actor", y = "Frequency") +  # Title and axis labels
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))  # Rotate x-axis labels for better readability
+
+```
+
+
+
+Event_type by top 5 actors histogram 
+```{r}
+event_types <- unique(df$event_type)
+
+# Loop over each event type
+for (event in event_types) {
+  
+  # Filter data by event type
+  event_df <- df %>% filter(event_type == event)
+  
+  # Get the top-5 actors for the current event type
+  top_actors <- event_df %>% 
+    count(actor1, sort = TRUE) %>% 
+    top_n(5, n) %>% 
+    arrange(desc(n))
+  
+  # Filter data only for the top-5 actors
+  event_top_df <- event_df %>% filter(actor1 %in% top_actors$actor1)
+  
+  # Print the histogram for the top-5 actors for the current event type
+  cat("\nHistogram for top-5 actor1 in event_type =", event, ":\n")
+  
+  p <- ggplot(event_top_df, aes(x = reorder(actor1, -table(actor1)[actor1]))) +
+    geom_bar(fill = "red", color = "black") +
+    theme_minimal() +
+    labs(title = paste("Top-5 actor1 in", event), x = "Actor1", y = "Frequency") +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1))
+  
+  print(p)
+}
+
+```
+
+
+
+
+
+----------------------------------------------------------------------------
+
+
+
+---
+1) Is there an association between type of conflict(event_type) and conflict groups(actor1)? 
+---
+
+
+
+```{r}
+# Get the unique event types
+event_types <- unique(df$event_type)
+
+# Loop through each event_type and create a plot
+for (event in event_types) {
+  # Filter the data for the current event_type
+  event_df <- df %>% filter(event_type == event)
+  
+  # Count the number of events per year for the current event_type
+  events_per_year <- event_df %>%
+    group_by(year) %>%
+    count() %>%
+    arrange(year)
+  
+  # Create the histogram for the current event_type
+  p <- ggplot(events_per_year, aes(x = year, y = n)) +
+    geom_bar(stat = "identity", fill = "blue", color = "black") +  # Create bar chart
+    theme_minimal() +                                             # Use minimal theme
+    labs(title = paste("Number of", event, "Events per Year"), x = "Year", y = "Number of Events") +  # Add title and axis labels
+    theme(axis.text.x = element_text(angle = 45, hjust = 1))       # Rotate x-axis labels for readability
+  
+  # Print the plot for the current event_type
+  print(p)
+}
+```
+
