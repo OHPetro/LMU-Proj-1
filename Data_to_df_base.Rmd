@@ -1,0 +1,138 @@
+---
+title: "Data preparation"
+output: html_notebook
+---
+
+---
+
+*Fragestellung: * 
+
+
+*Step Overview:*
+1) Drop rows where date 2024+ 
+2) Drop all events without id or only with one actor
+3) Group actors in general (not top 10)
+4) Short to long format (add actor2)
+5) 
+
+
+*Last step : download data to file df_base.csv*
+
+
+
+*Libraries*
+---
+
+```{r}
+# Загрузка необходимых библиотек
+library(dplyr)
+library(ggplot2)
+library(gridExtra)
+library(tidyverse)
+library(forcats)
+library(vcd)  # Установите, если не установлен: install.packages("vcd")
+```
+
+
+
+
+
+*Download data*
+
+```{r}
+
+# Loading the dataset
+file_path <- "1997-01-01-2025-01-01-Nigeria.csv"
+df_nigeria <- read.csv(file_path, stringsAsFactors = FALSE)
+
+# Displaying the first 5 rows of the dataset
+cat("First 5 rows of the dataset:\n")
+print(head(df_nigeria, 5))
+print(dim(df_nigeria))
+
+```
+
+
+
+*1) Drop rows where date 2025+ *
+
+```{r}
+df_nigeria <- df_nigeria[df_nigeria$year < 2025, ]
+print(dim(df_nigeria))
+```
+
+
+*2) Drop all events without id or only with one actor*
+
+```{r}
+# Count occurrences of each event_id_cnty
+event_counts <- table(df_nigeria$event_id_cnty)
+
+# Keep only rows where event_id_cnty appears more than once
+df_nigeria <- df_nigeria[df_nigeria$event_id_cnty %in% names(event_counts[event_counts > 1]), ]
+
+print(dim(df_nigeria))
+
+```
+
+
+
+
+*3) Group actors in general (not top 10)*
+
+
+```{r}
+
+df_nigeria$actor1 <- gsub("\\(.*", "", df_nigeria$actor1)
+print(head(df_nigeria, 5))
+
+```
+
+
+*4) Short to long format (add actor2)*
+
+```{r}
+library(dplyr)
+library(tidyr)  # Load dplyr for easy data manipulation
+
+print("before")
+print(dim(df_nigeria))
+
+# Первая таблица: Первое вхождение уникальной комбинации event_id_cnty + actor1
+df_first <- df_nigeria %>%
+  group_by(event_id_cnty) %>%
+  slice(1) %>%
+  ungroup()
+
+# Вторая таблица: Второе вхождение уникальной комбинации event_id_cnty + actor1
+df_second <- df_nigeria %>%
+  group_by(event_id_cnty) %>%
+  slice(2) %>%
+  ungroup() %>%
+  select(event_id_cnty, actor1) %>%  # Берём только нужные колонки
+  rename(actor2 = actor1)  # Меняем название, чтобы избежать дублирования
+
+# Объединяем две таблицы по event_id_cnty
+df_nigeria <- df_first %>%
+  left_join(df_second, by = "event_id_cnty")
+
+# Вывод результата
+print(df_nigeria)
+
+print("after")
+print(dim(df_nigeria))
+```
+
+
+
+
+*Last step*
+
+```{r}
+write.csv(df_nigeria, file = "df_base.csv", row.names = FALSE)
+df_base <- read.csv("df_base.csv")
+```
+
+
+
+
