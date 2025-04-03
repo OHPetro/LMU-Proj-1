@@ -1,0 +1,340 @@
+---
+title: "R Notebook"
+
+---
+
+
+#packages
+```{r}
+
+# List of all required packages
+packages <- c(
+  "dplyr",        # for data manipulation
+  "ggplot2",      # for visualization
+  "lubridate",    # for date parsing and manipulation
+  "GGally",       # for network visualizations (optional in other scripts)
+  "network",      # for network data structures
+  "sna",          # for social network analysis
+  "intergraph",   # for converting between network data classes
+  "forcats",      # for factor handling (used in early script)
+  "tidyverse",    # for full data science toolkit (includes dplyr, ggplot2, etc.)
+  "vcd"           # for categorical data visualization (used in initial code)
+)
+
+# Check which packages are already installed
+installed <- packages %in% rownames(installed.packages())
+
+# Install only missing packages
+if (any(!installed)) {
+  install.packages(packages[!installed])
+} else {
+  message("All required packages are already installed.")
+}
+
+# Load all packages
+invisible(lapply(packages, library, character.only = TRUE))
+```
+
+
+
+
+
+# Protets with Riots 
+
+```{r}
+df_sorted <- df_green
+
+# Convert date from string to Date format (e.g., "31 December 2024")
+df_sorted <- df_sorted %>%
+  mutate(event_date2 = dmy(event_date))
+
+# Sort data by location and date
+df_sorted <- df_sorted %>%
+  arrange(location, event_date2)
+
+# Add indicators:
+# - is_protest: if the event is a protest
+# - lag_date: previous date in the group
+# - lag_location: previous location in the group
+# - new_episode: TRUE if date gap > 1 day or location changed
+df_sorted <- df_sorted %>%
+  mutate(
+    is_protest = (event_type == "Protests"),
+    lag_date = lag(event_date2),
+    lag_location = lag(location),
+    new_episode = (event_date2 - lag_date > 1) | (location != lag_location)
+  )
+
+# Assign episode ID: start a new ID each time a new episode is detected
+df_sorted <- df_sorted %>%
+  mutate(episode_id = cumsum(ifelse(is.na(new_episode), FALSE, new_episode)))
+
+# Group by protest episode to determine if it includes riots
+df_episodes <- df_sorted %>%
+  group_by(episode_id, location) %>%
+  summarise(
+    has_protest = any(is_protest),
+    has_violence = any(event_type == "Riots"),
+    start_date = min(event_date2),
+    end_date = max(event_date2)
+  ) %>%
+  filter(has_protest) %>%
+  ungroup()
+
+# Calculate percentage of protest episodes that involved riots
+summary_stats <- df_episodes %>%
+  summarise(percentage = mean(has_violence) * 100)
+
+# Plot: Distribution of protest episodes with and without riots
+ggplot(df_episodes, aes(x = has_violence)) +
+  geom_bar(aes(y = (..count..)/sum(..count..)*100), fill = "#00204DFF") +
+  geom_text(aes(y = (..count..)/sum(..count..)*100, 
+                label = sprintf("%.1f%%", (..count..)/sum(..count..)*100)), 
+            stat = "count", 
+            vjust = -0.5, 
+            color = "black",
+            size = 6) +  # <- increase text size (default is ~3.5)
+  scale_x_discrete(labels = c("no Riots", "with Riots")) +
+  labs(
+    title = "How many Protests lead to Riots",
+    x = "Protests",
+    y = "%"
+  ) +
+  theme_minimal()+
+  theme(
+    plot.title = element_text(size = 16, face = "bold"),
+    axis.title = element_text(size = 14),
+    axis.text = element_text(size = 12)
+  )
+
+# Print summary statistics
+print(summary_stats)
+```
+
+
+
+
+# Distribution of duration of protest episodes without and with riots
+
+```{r}
+library(dplyr)
+library(ggplot2)
+library(lubridate)
+
+df_sorted <- df_green
+
+# Convert event_date to Date format (e.g., "31 December 2024")
+df_sorted <- df_sorted %>%
+  mutate(event_date2 = dmy(event_date))
+
+# Sort data by location and date
+df_sorted <- df_sorted %>%
+  arrange(location, event_date2)
+
+# Add indicator of episode change:
+# A new episode starts if the time gap between protests is more than 1 day or location changes
+df_sorted <- df_sorted %>%
+  mutate(
+    is_protest = (event_type == "Protests"),
+    lag_date = lag(event_date2),
+    lag_location = lag(location),
+    new_episode = (event_date2 - lag_date > 1) | (location != lag_location)
+  )
+
+# Assign a unique episode ID to each new protest episode
+df_sorted <- df_sorted %>%
+  mutate(episode_id = cumsum(ifelse(is.na(new_episode), FALSE, new_episode)))
+
+# Group by protest episodes and calculate whether riots occurred
+df_episodes <- df_sorted %>%
+  group_by(episode_id, location) %>%
+  summarise(
+    has_protest = any(is_protest),
+    has_violence = any(event_type == "Riots"),
+    start_date = min(event_date2),
+    end_date = max(event_date2)
+  ) %>%
+  filter(has_protest) %>%
+  ungroup()
+
+# Add a column for protest duration (+1 to include both start and end dates)
+df_episodes <- df_episodes %>%
+  mutate(duration = as.numeric(difftime(end_date, start_date, units = "days")) + 1)
+
+# Calculate the percentage of protest episodes that involve riots
+summary_stats <- df_episodes %>%
+  summarise(percentage = mean(has_violence) * 100)
+
+# Bar plot: percentage of protest episodes that led to riots
+ggplot(df_episodes, aes(x = has_violence)) +
+  geom_bar(aes(y = (..count..)/sum(..count..)*100), fill = "steelblue") +
+  scale_x_discrete(labels = c("No Riots", "Riots")) +
+  labs(
+    title = "% of Protests that Lead to Riots",
+    x = "Riots",
+    y = "%"
+  ) +
+  theme_minimal()
+
+# Histogram: duration of protest episodes with riots
+ggplot(df_episodes %>% filter(has_violence), aes(x = duration)) +
+  geom_histogram(binwidth = 1, fill = "red", color = "black") +
+  labs(
+    title = "Distribution of Protest Duration Where Riots Occurred",
+    x = "Duration (days)",
+    y = "Count"
+  ) +
+  theme_minimal()
+
+# Histogram: duration of protest episodes without riots
+ggplot(df_episodes %>% filter(!has_violence), aes(x = duration)) +
+  geom_histogram(binwidth = 1, fill = "#00204DFF", color = "black") +
+  labs(
+    title = "Distribution of Protest Duration Where No Riots Occurred",
+    x = "Duration (days)",
+    y = "Count"
+  ) +
+  theme_minimal() 
+
+# Calculate mean duration of protest episodes with and without riots
+mean_duration_with_violence <- mean(df_episodes$duration[df_episodes$has_violence == TRUE])
+mean_duration_without_violence <- mean(df_episodes$duration[df_episodes$has_violence == FALSE])
+
+# Print mean durations
+cat("Mean Duration of Protests with Riots:", mean_duration_with_violence, "days\n")
+cat("Mean Duration of Protests without Riots:", mean_duration_without_violence, "days\n")
+
+# Perform a t-test to compare protest durations with and without riots
+t_test_result <- t.test(duration ~ has_violence, data = df_episodes)
+
+# Print t-test result
+print(t_test_result)
+
+# Print summary percentage of protests involving riots
+print(summary_stats)
+
+
+```
+
+
+# Density of duration of protest episodes without and with riot
+
+```{r}
+library(dplyr)
+library(ggplot2)
+library(lubridate)
+
+df_sorted <- df_green
+
+# Convert event_date to Date format (e.g., "31 December 2024")
+df_sorted <- df_sorted %>%
+  mutate(event_date2 = dmy(event_date))
+
+# Sort data by location and date
+df_sorted <- df_sorted %>%
+  arrange(location, event_date2)
+
+# Add indicators:
+# - is_protest: TRUE if event is a protest
+# - lag_date: previous date
+# - lag_location: previous location
+# - new_episode: TRUE if more than 1 day between events or location changed
+df_sorted <- df_sorted %>%
+  mutate(
+    is_protest = (event_type == "Protests"),
+    lag_date = lag(event_date2),
+    lag_location = lag(location),
+    new_episode = (event_date2 - lag_date > 1) | (location != lag_location)
+  )
+
+# Assign episode IDs (new ID starts with each new episode)
+df_sorted <- df_sorted %>%
+  mutate(episode_id = cumsum(ifelse(is.na(new_episode), FALSE, new_episode)))
+
+# Group by protest episodes and identify violence involvement
+df_episodes <- df_sorted %>%
+  group_by(episode_id, location) %>%
+  summarise(
+    has_protest = any(is_protest),
+    has_violence = any(event_type == "Riots"),
+    start_date = min(event_date2),
+    end_date = max(event_date2)
+  ) %>%
+  filter(has_protest) %>%
+  ungroup()
+
+# Add protest duration column (+1 to include both start and end dates)
+df_episodes <- df_episodes %>%
+  mutate(duration = as.numeric(difftime(end_date, start_date, units = "days")) + 1)
+
+# Calculate the percentage of protest episodes involving violence
+summary_stats <- df_episodes %>%
+  summarise(percentage = mean(has_violence) * 100)
+
+# Compute mean duration of protests with and without violence
+mean_duration_with_violence <- mean(df_episodes$duration[df_episodes$has_violence == TRUE])
+mean_duration_without_violence <- mean(df_episodes$duration[df_episodes$has_violence == FALSE])
+
+# Print mean durations
+cat("Mean Duration of Protests with Violence:", mean_duration_with_violence, "days\n")
+cat("Mean Duration of Protests without Violence:", mean_duration_without_violence, "days\n")
+
+# Perform t-test to compare durations of violent vs non-violent protests
+t_test_result <- t.test(duration ~ has_violence, data = df_episodes)
+
+# Print the t-test results
+print(t_test_result)
+
+# Plot density distribution of protest duration by violence involvement
+ggplot(df_episodes, aes(x = duration, fill = factor(has_violence))) +
+  geom_density(alpha = 0.5) +  # Transparent overlay
+  scale_fill_manual(values = c("steelblue", "tomato"), labels = c("No Riots", "Riots")) +
+  geom_vline(aes(xintercept = mean_duration_with_violence), color = "tomato", linetype = "dashed") +
+  geom_vline(aes(xintercept = mean_duration_without_violence), color = "steelblue", linetype = "dashed") +
+  labs(
+    title = "Distribution of Protest Duration with and without Riots",
+    x = "Duration (days)",
+    y = "Density",
+    fill = "Riots"
+  ) +
+  xlim(1, 5) +
+  theme_minimal()
+
+
+
+# # Plot density distribution of protest duration by violence involvement
+# ggplot(df_episodes, aes(x = duration, fill = factor(has_violence))) +
+#   geom_density(alpha = 0.5) +  # Transparent overlay
+#   scale_fill_manual(
+#     values = c("steelblue", "tomato"),
+#     labels = c("No Riots", "Riots")
+#   ) +
+#   geom_vline(aes(xintercept = mean_duration_with_violence), color = "tomato", linetype = "dashed") +
+#   geom_vline(aes(xintercept = mean_duration_without_violence), color = "steelblue", linetype = "dashed") +
+#   labs(
+#     title = "Distribution of Protest Duration with and without Riots",
+#     x = "Duration (days)",
+#     y = "Density",
+#     fill = "Riot Involvement"
+#   ) +
+#   xlim(1, 5) +
+#   theme_minimal() +
+#   theme(
+#     plot.title = element_text(size = 18, face = "bold", hjust = 0.5),  # Bigger and centered title
+#     axis.title.x = element_text(size = 14, face = "bold"),
+#     axis.title.y = element_text(size = 14, face = "bold"),
+#     axis.text = element_text(size = 12),  # Axis tick labels
+#     legend.title = element_text(size = 13, face = "bold"),
+#     legend.text = element_text(size = 12)
+#   )
+
+# Print summary percentage again
+print(summary_stats)
+
+```
+
+
+
+
+
+
