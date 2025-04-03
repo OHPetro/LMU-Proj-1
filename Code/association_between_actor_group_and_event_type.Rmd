@@ -1,5 +1,5 @@
 ---
-title: "Fragestellung 1"
+title: "Association between actor group and event type"
 ---
 
 ## *Libraries*
