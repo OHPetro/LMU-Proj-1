@@ -1,0 +1,301 @@
+---
+title: "Fragestellung 1"
+---
+
+## *Libraries*
+
+
+```{r}
+
+# List of all required packages
+packages <- c(
+  "dplyr",        # for data manipulation
+  "ggplot2",      # for visualization
+  "stringr",      # for date parsing and manipulation
+  "viridis",      # for color scales
+  "scales",       # for formatting
+  "forcats",      # for factor reordering in plots
+  "tidytext"      #for text
+)
+
+# Check which packages are already installed
+installed <- packages %in% rownames(installed.packages())
+
+# Install only missing packages
+if (any(!installed)) {
+  install.packages(packages[!installed])
+} else {
+  message("All required packages are already installed.")
+}
+
+# Load all packages
+invisible(lapply(packages, library, character.only = TRUE))
+```
+
+
+*General data overview*
+
+#Actor group distribution
+
+```{r}
+
+
+actors_dis <- df_green %>%
+  mutate(actor1 = case_when(
+    actor1 == "Boko Haram - Jamaatu Ahli is-Sunnah lid-Dawati wal-Jihad" ~ "Boko Haram",
+    actor1 == "Islamic State West Africa Province" ~ "ISWAP",
+    TRUE ~ actor1
+  )) %>%
+  count(actor1) %>%
+  mutate(percentage = (n / sum(n)) * 100) %>% 
+  arrange(desc(percentage)) %>%
+  mutate(actor1 = factor(actor1, levels = actor1))
+
+
+ggplot(actors_dis, aes(x = 2, y = percentage, fill = actor1)) +
+  geom_col(color = "white") +
+  coord_polar(theta = "y", start = 0) +
+  xlim(0.5, 2.5) +
+  theme_void() +
+  labs(
+    title = "Actor Group Distribution",
+    fill = "Actor group",
+    caption = "*ISWAP = Islamic State West Africa Province"
+  ) +
+  geom_text(aes(label = paste0(round(percentage, 1), "%")),
+            position = position_stack(vjust = 0.5),
+            color = "white",
+            size = 6) +
+  scale_fill_viridis(discrete = TRUE, option = "cividis") +
+  theme(
+    plot.title = element_text(size = 18, face = "bold", hjust = 0.5),
+    legend.title = element_text(size = 12, face = "bold"),
+    legend.text = element_text(size = 10, face = "bold"),
+    plot.caption = element_text(face = "bold")
+  )
+
+
+ggsave("actor group distribution.png", width = 11, height = 5, dpi = 300)
+
+
+
+```
+
+
+
+#Event type distribution
+
+```{r}
+
+
+event_summary <- df_green %>%
+  group_by(event_type) %>%
+  summarise(count = n()) %>%
+  mutate(rel_freq = count / sum(count)) %>%
+  arrange(desc(rel_freq)) %>%                     
+  mutate(event_type = factor(event_type, levels = event_type))
+
+event_colors <- c(
+  "Battles" = "#118DFF",
+  "Violence against civilians" = "#12239E",
+  "Riots" = "#e66c37",
+  "Explosions/Remote violence" = "#6B007B",
+  "Protests" = "#E044A7",
+  "Strategic developments" = "#744EC2"
+)
+
+ggplot(event_summary, aes(x = event_type, y = rel_freq)) +
+  geom_bar(stat = "identity", aes(fill = event_type)) +
+  geom_text(aes(label = scales::percent(rel_freq)), 
+            vjust = -0.5, 
+            color = "black",
+            size = 5) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 12),
+    axis.text.y = element_text(size = 14),
+    axis.title.x = element_text(size = 16, face = "bold"),
+    axis.title.y = element_text(size = 16, face = "bold"),
+    legend.title = element_text(size = 14, face = "bold"),
+    legend.text = element_text(size = 12),
+    plot.title = element_text(size = 18, face = "bold", hjust = 0.5)
+  ) +
+  labs(x = "Event type", y = "Frequency", fill = "Event type") +
+  scale_y_continuous(labels = scales::percent_format()) +
+  scale_fill_manual(values = event_colors)
+
+
+ggsave("event type distribution.png", width = 10, height = 8, dpi = 300)
+    
+
+```
+
+
+
+*Association between actor groups and event types*
+
+
+
+#top 5 actors in each event type
+
+```{r}
+
+top20_actor <- df_green %>%
+  count(actor1, sort = TRUE) %>%
+  top_n(20, wt = n) %>%
+  pull(actor1)
+
+actor_eventtype_summary <- df_green %>%
+  filter(actor1 %in% top20_actor) %>%
+  count(event_type, actor1) %>%
+  rename(Freq = n)
+
+actor_eventtype_grouped <- actor_eventtype_summary %>%
+  group_by(event_type, actor1) %>%
+  summarise(Freq = sum(Freq), .groups = "drop")
+
+actor_eventtype_grouped <- actor_eventtype_grouped %>%
+  mutate(actor1 = case_when(
+    actor1 == "Boko Haram - Jamaatu Ahli is-Sunnah lid-Dawati wal-Jihad" ~ "Boko Haram",
+    actor1 == "Islamic State West Africa Province" ~ "ISWAP",
+    TRUE ~ actor1
+  ))
+
+actor_eventtype_top5 <- actor_eventtype_grouped %>%
+  group_by(event_type) %>%
+  slice_max(Freq, n = 5) %>%
+  ungroup()
+
+ggplot(actor_eventtype_top5, aes(x = actor1, y = Freq, fill = actor1)) +
+  geom_bar(stat = "identity", width = 0.7) +
+  geom_text(aes(label = Freq), vjust = -0.4, size = 4, fontface = "bold") +
+  facet_wrap(~ event_type, scales = "free_x") +
+  labs(
+    x = "Actors",
+    y = "Frequency",
+    fill = "Actors",
+    title = "Top 5 Actors in Each Event Type",
+    caption = "*ISWAP = Islamic State West Africa Province") +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, face = "bold", size = 12),
+    plot.title = element_text(hjust = 0.5, size = 16, face = "bold"),
+    axis.title.x = element_text(size = 12, face = "bold"),
+    axis.title.y = element_text(size = 12, face = "bold"),
+    legend.position = "right",
+    legend.text = element_text(face = "bold"),
+    legend.title = element_text(face = "bold"),
+    strip.text = element_text(size = 14, face = "bold"),
+    strip.background = element_blank(),
+    plot.caption = element_text(face = "bold")
+  ) +
+  scale_x_reordered() +
+  scale_fill_viridis_d(option = "cividis")
+
+
+ggsave("top 5 actors in each event type.png", width = 16, height = 8, dpi = 300)
+
+
+```
+
+#top 5 actor pairs in Violence against civilians
+
+```{r}
+
+actor_pair_event <- df_pink %>%
+  group_by(event_type) %>%                        
+  count(actor_pair, name = "frequency") %>%       
+  mutate(relative_fq = frequency / sum(frequency))
+
+actor_pair_battles <- actor_pair_event[actor_pair_event$event_type == "Violence against civilians",]
+
+actor_pair_battles_top5 <- actor_pair_battles %>%
+  slice_max(order_by = relative_fq, n = 5)
+
+actor_pair_battles_top5 <- actor_pair_battles_top5 %>%
+  mutate(actor_pair = str_replace(actor_pair, 
+                                  "Civilians \\+ Islamic State West Africa Province", 
+                                  "Civilians + ISWAP"))
+
+ggplot(actor_pair_battles_top5, aes(x = actor_pair, y = relative_fq, fill = actor_pair)) +
+  geom_bar(stat = "identity") +
+  labs(
+  x = "Actor pairs", 
+  y = "Relative frequency", 
+  fill = "Actor pairs",
+  title = "Top 5 Actor Pairs in Violence Against Civilians",
+  caption = "*ISWAP = Islamic State West Africa Province"
+) +
+  scale_fill_viridis(discrete = TRUE, option = "viridis") +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 12, face = "bold"),
+    axis.text.y = element_text(size = 12, face = "bold"),
+    axis.title.x = element_text(size = 12, face = "bold"),
+    axis.title.y = element_text(size = 12, face = "bold"),
+    plot.title = element_text(size = 16, hjust = 0.5, face = "bold"),
+    legend.text = element_text(size = 10, face = "bold"),
+    legend.title = element_text(size = 12, face = "bold"),
+    legend.position = "bottom",
+    plot.caption = element_text(face = "bold")
+  ) +
+  scale_y_continuous(labels = scales::percent_format()) +
+  geom_text(aes(label = scales::percent(relative_fq, accuracy = 1)),  
+            vjust = -0.5,
+            size = 4, 
+            fontface = "bold") +
+  guides(fill = guide_legend(nrow = 2))
+
+
+ggsave("top 5 actor pairs in violence against civilians.png", width = 10, height = 8, dpi = 300)
+
+```
+
+
+#Distribution of Event Types Across Actor Groups
+
+```{r}
+
+actor_eventtype_summary <- actor_eventtype_summary %>%
+  mutate(actor1 = case_when(
+    actor1 == "Boko Haram - Jamaatu Ahli is-Sunnah lid-Dawati wal-Jihad" ~ "Boko Haram",
+    actor1 == "Islamic State West Africa Province" ~ "ISWAP",
+    TRUE ~ actor1
+  )) %>%
+  group_by(actor1, event_type) %>%
+  summarise(Freq = sum(Freq), .groups = 'drop')
+
+ggplot(actor_eventtype_summary, aes(x = actor1, y = event_type, fill = Freq)) +
+  geom_tile(color = "white", linewidth = 0.5) +
+  scale_fill_gradientn(
+    colors = viridis::viridis(100, option = "plasma", direction = -1),
+    limits = c(0, max(actor_eventtype_summary$Freq)),
+    values = scales::rescale(c(0, 1000, max(actor_eventtype_summary$Freq)))
+  ) +     
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 12, face = "bold"),
+    axis.text.y = element_text(size = 12, face = "bold"),
+    axis.title.x = element_text(size = 12, face = "bold"),
+    axis.title.y = element_text(size = 12, face = "bold"),
+    plot.title = element_text(size = 16, hjust = 0.5, face = "bold"),
+    legend.text = element_text(size = 10, face = "bold"),
+    legend.title = element_text(size = 12, face = "bold"),
+    legend.position = "bottom",
+    plot.caption = element_text(face = "bold"),
+    panel.grid = element_blank()
+  ) +
+  labs(
+    x = "Actor Groups",
+    y = "Event types",
+    fill = "Frequency",
+    title = "Distribution of Event Types Across Actor Groups",
+    caption = "*ISWAP = Islamic State West Africa Province"
+  ) +
+  geom_text(aes(label = round(Freq, 2)), color = "white", size = 3, fontface = "bold")
+
+
+ggsave("Distribution of Event Types Across Actor Groups.png", width = 14, height = 8, dpi = 300)
+
+
+```
