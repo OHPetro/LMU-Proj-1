@@ -75,7 +75,7 @@ ggplot(actors_dis, aes(x = 2, y = percentage, fill = actor1)) +
   )
 
 
-ggsave("actor group distribution.png", width = 11, height = 5, dpi = 300)
+ggsave("Actor group distribution.png", width = 11, height = 5, dpi = 300)
 
 
 
@@ -125,7 +125,7 @@ ggplot(event_summary, aes(x = event_type, y = rel_freq)) +
   scale_fill_manual(values = event_colors)
 
 
-ggsave("event type distribution.png", width = 10, height = 8, dpi = 300)
+ggsave("Event type distribution.png", width = 10, height = 8, dpi = 300)
     
 
 ```
@@ -193,7 +193,7 @@ ggplot(actor_eventtype_top5, aes(x = actor1, y = Freq, fill = actor1)) +
   scale_fill_viridis_d(option = "cividis")
 
 
-ggsave("top 5 actors in each event type.png", width = 16, height = 8, dpi = 300)
+ggsave("Top 5 actors in each event type.png", width = 16, height = 8, dpi = 300)
 
 
 ```
@@ -247,7 +247,7 @@ ggplot(actor_pair_battles_top5, aes(x = actor_pair, y = relative_fq, fill = acto
   guides(fill = guide_legend(nrow = 2))
 
 
-ggsave("top 5 actor pairs in violence against civilians.png", width = 10, height = 8, dpi = 300)
+ggsave("Top 5 actor pairs in violence against civilians.png", width = 10, height = 8, dpi = 300)
 
 ```
 
